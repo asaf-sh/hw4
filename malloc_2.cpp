@@ -1,11 +1,12 @@
 #include <math.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <string.h>
 
 #define MAX_SIZE pow(10, 8)
 #define BAD_SBRK ((void*)(-1))
 
-
+struct MallocMetaData_t;
 typedef struct MallocMetaData_t* MD;
 
 struct MallocMetaData_t{
@@ -23,11 +24,11 @@ bool validate_size(size_t size){
 }
 
 void* md2d(MD md){
-    return md+MD_SIZE;
+    return (void*) (md+MD_SIZE);
 }
 
 MD d2md(void* d){
-    return d-MD_SIZE;
+    return (MD)d - MD_SIZE;
 }
 
 
@@ -35,10 +36,12 @@ MD d2md(void* d){
 
 //*********START - LIST************//
 
-struct MallocMetaData_t head_t;
-MD head = &head_t;
-head->prev = head;
-head->next = head;
+struct MallocMetaData_t head_t = {&head_t, &head_t, false, 0};
+//head_t.next = &head_t;
+//head_t.prev = &head_t;
+MD head = (MD) &head_t;
+//head->prev = head;
+//head->next = head;
 
 bool is_empty(){
     return head->next == head;
@@ -52,11 +55,11 @@ void _insert_before(MD new_md, MD pos){
     new_md->next = pos;
 }
 
-bool push_back(MD md){
+void push_back(MD md){
     _insert_before(md, head);
 }
 
-bool insert(MD md){
+void insert(MD md){
     if(is_empty())
         push_back(md);
 }
@@ -77,9 +80,9 @@ MD get_first(BlockFilter filter, void* args){
 //calls sbrk for new allocation (including its metadata), and add its metadata to end of list
 //similar code to smalloc from malloc_1.cpp
 void* _new_assign(size_t size){
-    void* ppd;
     size_t full_size = size + MD_SIZE;
-    if (ppd = sbrk(full_size) == BAD_SBRK)
+    void* ppd = sbrk(full_size);
+    if (ppd == BAD_SBRK)
         return NULL;
     
     MD new_md = (MD) ppd;
@@ -87,7 +90,7 @@ void* _new_assign(size_t size){
     new_md->is_free = false;
     push_back(new_md);
 
-    return md2d(ppd);    
+    return md2d(new_md);    
 }
 
 void* _re_assign(MD old_md){
@@ -96,23 +99,28 @@ void* _re_assign(MD old_md){
     return md2d(old_md);
 }
 
-bool free_n_fit(MD md, void* size){
-    return md->is_free && md->size >= (size_t)size;
+bool free_n_fit(MD md, void* size_ptr){
+    return md->is_free && md->size >= *((size_t*)size_ptr);
 }
+
 //*********END - ALLOC UTILS************//
 
+
 //*********START - REQUSTED FUNCTIONS************//
+
 void* smalloc(size_t size){
     if(!validate_size(size))
         return NULL;
-    MD first_fit = get_first(free_n_fit, size);
-    return (first_fit ? re_assign(first_fit) : _new_assign(size));
+
+    MD first_fit = get_first(free_n_fit, &size);
+    return (first_fit ? _re_assign(first_fit) : _new_assign(size));
 }
 
 void* scalloc(size_t num, size_t size){
     void* allocated_block = smalloc(num*size);
     if(allocated_block)
         memset(allocated_block, 0, num*size);
+
     return allocated_block;
 }
 
@@ -157,40 +165,40 @@ bool tautology(MD md, void* args){
 
 //******UPDATERS*****//
 void count(MD md, void* stats){
-    (size_t)stats += 1;
+    *(size_t*)stats += 1;
 }
 void bytes_count(MD md, void* stats){
-    (size_t)stats += md->size;
+    *(size_t*)stats += md->size;
 }
 
 
 //******REQUSTED STATS METHODS*******
 size_t _num_free_blocks(){
     size_t counter = 0;
-    get_stats(counter, is_free, NULL, count);
+    get_stats(&counter, is_free, NULL, count);
     return counter;
 }
 
 size_t _num_free_bytes(){
     size_t bytes_counter = 0;
-    get_stats(bytes_counter, is_free, NULL, bytes_count);
+    get_stats(&bytes_counter, is_free, NULL, bytes_count);
     return bytes_counter;
 }
 
 size_t _num_allocated_blocks(){
     size_t counter=0;
-    get_stats(counter, tautology, NULL, count);
+    get_stats(&counter, tautology, NULL, count);
     return counter;
 }
 
 size_t _num_allocated_bytes(){
     size_t bytes_counter=0;
-    get_stats(bytes_counter, tautology, NULL, bytes_count);
+    get_stats(&bytes_counter, tautology, NULL, bytes_count);
     return bytes_counter;
 }
 
 size_t _num_meta_data_bytes(){
-    return _num_allocated_blocks * MD_SIZE;
+    return _num_allocated_blocks() * MD_SIZE;
 }
 
 size_t _size_meta_data(){
