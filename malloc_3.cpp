@@ -47,6 +47,9 @@ MD d2md(void* d){
 struct MallocMetaData_t head_t = {&head_t, &head_t, false, 0};
 MD head = (MD) &head_t;
 
+struct MallocMetaData_t map_head_t = {&head_t, &head_t, false, 0};
+MD map_head = (MD) &head_t;
+
 MD ncc1701d = NULL;
 MD elizabeth2 = NULL;
 
@@ -54,8 +57,8 @@ bool is_wild(MD md){
     return md == ncc1701d;
 }
 
-bool is_empty(){
-    return head->next == head;
+bool is_empty(MD l){
+    return l->next == l;
 }
 
 void _insert_before(MD new_md, MD pos){
@@ -71,24 +74,25 @@ void _remove(MD md){
     md->next->prev = md->prev;
 }
 
-void push_back(MD md){
-    _insert_before(md, head);
+void push_back(MD md, MD l){
+    _insert_before(md, l);
 }
 
 
 
 typedef bool (*BlockFilter) (MD, void*);
 
-MD get_first(BlockFilter filter, void* args){
-    MD curr = head->next;
-    for(;curr != head && !filter(curr, args); curr=curr->next);
-    return (curr == head ? NULL: curr);
+MD get_first(MD l, BlockFilter filter, void* args){
+    MD curr = l->next;
+    for(;curr != l && !filter(curr, args); curr=curr->next);
+    return (curr == l ? NULL: curr);
 }
 
 struct lex_key{
     size_t size;
     void* addr;
-}
+};
+
 typedef struct lex_key* LK;
 
 bool size_x_addr_lex(MD md, void* void_key){
@@ -99,7 +103,7 @@ bool size_x_addr_lex(MD md, void* void_key){
 void insert(MD md){
     lex_key md_key = {md->size, md};
     MD first_greater = get_first(size_x_addr_lex, &md_key);
-    first_greater ? _insert_before(md, first_greater) : push_back(md);
+    first_greater ? _insert_before(md, first_greater) : push_back(head, md);
 }
 
 //*********END - LIST************//
@@ -133,6 +137,9 @@ void* _new_assign(size_t size){
         new_md->adjacent_prev = ncc1701d;
         ncc1701d = new_md;  //setting new frontier
         insert(new_md);
+    }
+    else{
+        push_back(map_head, new_md);
     }
     
     return md2d(new_md);    
@@ -191,6 +198,7 @@ void* scalloc(size_t num, size_t size){
 void free_map(MD md){
     if(munmap(p, p_md->size + MD_8SIZE) == -1)
         printf("handle bad munmap");
+    _remove(md);
 }
 
 MD get_next_adjacent(MD md){
@@ -340,8 +348,8 @@ void* srealloc(void* oldp, size_t size){
 //*********START - STATS METHODS************//
 typedef void (*StatsUpdater) (MD, void*);
 
-void get_stats(void* stats, BlockFilter filter, void* filter_args, StatsUpdater updater){
-    for(MD curr = head->next; curr != head; curr=curr->next)
+void get_stats(MD l, void* stats, BlockFilter filter, void* filter_args, StatsUpdater updater){
+    for(MD curr = l->next; curr != l; curr=curr->next)
         if(filter(curr, filter_args))
             updater(curr, stats);
 }
@@ -368,34 +376,36 @@ void bytes_count(MD md, void* stats){
 //******REQUSTED STATS METHODS*******
 size_t _num_free_blocks(){
     size_t counter = 0;
-    get_stats(&counter, is_free, NULL, count);
+    get_stats(head, &counter, is_free, NULL, count);
     return counter;
 }
 
 size_t _num_free_bytes(){
     size_t bytes_counter = 0;
-    get_stats(&bytes_counter, is_free, NULL, bytes_count);
+    get_stats(head, &bytes_counter, is_free, NULL, bytes_count);
     return bytes_counter;
 }
 
 size_t _num_allocated_blocks(){
     size_t counter=0;
-    get_stats(&counter, tautology, NULL, count);
+    get_stats(head, &counter, tautology, NULL, count);
+    get_stats(map_head, &counter, tautology, NULL, count);
     return counter;
 }
 
 size_t _num_allocated_bytes(){
     size_t bytes_counter=0;
-    get_stats(&bytes_counter, tautology, NULL, bytes_count);
+    get_stats(head, &bytes_counter, tautology, NULL, bytes_count);
+    get_stats(map_head, &bytes_counter, tautology, NULL, bytes_count);
     return bytes_counter;
 }
 
 size_t _num_meta_data_bytes(){
-    return _num_allocated_blocks() * MD_SIZE;
+    return _num_allocated_blocks() * MD_8SIZE;
 }
 
 size_t _size_meta_data(){
-    return MD_SIZE;
+    return MD_8SIZE;
 }
 
 //*********END - STATS METHODS************//
