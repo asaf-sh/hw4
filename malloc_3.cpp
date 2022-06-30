@@ -50,6 +50,9 @@ MD head = (MD) &head_t;
 MD ncc1701d = NULL;
 MD elizabeth2 = NULL;
 
+bool is_wild(MD md){
+    return md == ncc1701d;
+}
 
 bool is_empty(){
     return head->next == head;
@@ -145,7 +148,7 @@ void split_block(MD old_md, size_t offset){
     
     old_md->size = offset;
     
-    if(old_md == ncc1701d)
+    if(is_wild(old_md))
         ncc1701d = new_md;
 }
 
@@ -191,7 +194,7 @@ void free_map(MD md){
 }
 
 MD get_next_adjacent(MD md){
-    return md == ncc1701d ? NULL : md + MD_8SIZE + md->size;
+    return is_wild(md) ? NULL : md + MD_8SIZE + md->size;
 }
 
 MD get_prev_adjacent(MD md){
@@ -202,7 +205,7 @@ MD merge(MD left, MD right){
     _remove(right);
     left->size += right->size + MD_8SIZE;
     
-    if(right == ncc1701d)
+    if(is_wild(right))
         ncc1701d = left;
     
     return left;
@@ -230,16 +233,107 @@ void sfree(void* p){
 }
 
 void* srealloc(void* oldp, size_t size){
-    MD oldp_md;
+    size = Ceil8(size);
+    size_t full_size = size + MD_8SIZE;
+    MD oldp_md, new_md;
     if(oldp && (oldp_md=d2md(oldp))->size >= size)
         return oldp;
-
-    void* newp = smalloc(size);
-    if(oldp && newp){
-        memmove(newp, oldp, oldp_md->size);
-        sfree(oldp);
+    
+    size_t copy_size = oldp_md->size + MD_8SIZE;
+    
+    if(!(oldp_md->is_heap)){
+        new_md = mmap(NULL, full_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if(new_md == NULL)
+            return NULL;
+        memmove(new_md, oldp_md, copy_size);
+        new_md->size = size;
+        free_map(oldp_md);
+        return new_md;
     }
-    return newp;
+
+    MD prev = get_prev_adjacent(oldp_md);
+    if(prev && prev->is_free && prev->size + oldp_md->size +MD_8SIZE >= size){
+        new_md = merge(prev, new_md);
+        memmove(new_md, oldp_md, copy_size);
+        
+        if(new_md->size - size > SPLIT_SIZE)
+            split_block(new_md, size);
+        return new_md;
+    }
+
+    else if(prev && prev->is_free && is_wild(oldp_md)){
+        size_t alloc_size = size - prev->size;
+        bool is_free = oldp_md->is_free;
+        oldp_md->is_free = true;
+        MD new_md = _new_assign(alloc_size);
+        oldp_md->is_free = is_free;
+        MD new_md = merge(prev, new_md);
+        memmove(new_md, oldp_md, copy_size);
+
+        if(new_md->size - size > SPLIT_SIZE)
+            split_block(new_md, size);
+        
+        return new_md;
+    }
+
+    else if(is_wild(oldp_md)){
+        bool is_free = oldp_md->is_free;
+        oldp_md->is_free = true;
+        MD new_md = (MD)_new_assign(alloc_size);
+        oldp_md->is_free = is_free;
+        return oldp_md;
+    }
+
+    MD next - get_next_adjacent(oldp_md);
+    if(next && next->is_free && next->size + oldp_md->size + MD_8SIZE >= size){
+        new_md = merge(oldp_md, next);
+        
+        if(new_md->size - size > SPLIT_SIZE)
+            split_block(new_md, size);
+            
+        return new_md;
+    }
+    else if(prev && prev->is_free && next&&next->is_free&&prev->size + oldp_md->size + next->size +2*MD_8SIZE >= size){
+        new_md = merge(prev, new_md);
+        memmove(new_md, oldp_md, copy_size);
+        new_md = merge(new_md, next);
+
+        if(new_md->size - size > SPLIT_SIZE)
+            split_block(new_md, size);
+
+        return new_md;
+    }
+
+    else if(next && next->is_free && is_wild(next)){
+        if(prev && prev->is_free){
+            size_t alloc_size = size - (prev->size + 2*MD_8SIZE + oldp_md->size);
+            _new_assign(alloc_size);
+            new_md = merge(prev, new_md);
+            memmove(new_md, oldp_md, copy_size);
+            new_md = merge(new_md, next);
+        }
+        
+        else{
+            size_t alloc_size = size - (MD_8SIZE + oldp_md->size);
+            _new_assign(alloc_size);
+            new_md = merge(prev, new_md);   
+        }
+
+        if(new_md->size - size > SPLIT_SIZE)
+            split_block(new_md, size);
+
+        return new_md;
+    }
+
+    else{
+        void* newp = smalloc(size);
+        if(newp){
+            memmove(newp, oldp, oldp_md->size);
+            free_heap(oldp);
+        }
+        return newp;
+    }
+
 }
 //*********END - REQUSTED FUNCTIONS************//
 
