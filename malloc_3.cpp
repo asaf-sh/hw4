@@ -262,7 +262,7 @@ void free_heap(MD md){
     md->is_free = true;
     MD next = get_next_adjacent(md);
     printf("got next = %p\n", (void*) next);
-    if(!is_wild(md) && next->is_free){
+    if(next && next->is_free){
 	    printf("in merge next\n");
 	    print_md(next);
         md = merge(md, next);
