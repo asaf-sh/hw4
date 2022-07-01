@@ -21,7 +21,7 @@ struct MallocMetaData_t{
     MD adjacent_prev;
 };
 
-#define Ceil8(x) ((x%8 ? x+8-x%8 : x))
+#define Ceil8(x) ((x%8==0 ? x : x+8-x%8))
 #define MD_SIZE (sizeof(struct MallocMetaData_t))
 #define MD_8SIZE (Ceil8(MD_SIZE))
 #define MMAP_SIZE (128 * 1024)
@@ -124,7 +124,7 @@ void* _new_assign(size_t size){
         return ncc1701d;
     }
 
-    MD new_md = (MD)(full_size < MMAP_SIZE ? sbrk(full_size - (ncc1701d->is_free * ncc1701d->size)) : \
+    MD new_md = (MD)(full_size < MMAP_SIZE ? sbrk(full_size) : \
                     mmap(NULL, full_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
     
     if (new_md == BAD_ALLOC)
@@ -185,7 +185,7 @@ void* smalloc(size_t size){
     MD first_fit = get_first(head, free_n_fit, &size);
     
     // notice that for size > MMAP first_fit must return as NULL
-    return first_fit ? _re_assign(first_fit, size) : _new_assign(size);
+    return first_fit!=NULL ? _re_assign(first_fit, size) : _new_assign(size);
 }
 
 void* scalloc(size_t num, size_t size){
