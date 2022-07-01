@@ -251,8 +251,8 @@ void free_heap(MD md){
 }
 
 void sfree(void* p){
-    if(p){
-        MD p_md = d2md(p);
+    MD p_md;
+    if(p && !((p_md=d2md(p))->is_free)){
         p_md->is_heap ? free_heap(p_md) : free_map(p_md);
     }
 }
