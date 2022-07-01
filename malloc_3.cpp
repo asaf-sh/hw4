@@ -130,6 +130,7 @@ void insert(MD md){
 //*********START - ALLOC UTILS************//
 
 void* enterprise_expansion(size_t size){
+	printf("in enterprise!\n");
     if(sbrk(size - (ncc1701d->size)) == BAD_ALLOC)
         return NULL;
     ncc1701d->size = size;
@@ -294,13 +295,13 @@ void sfree(void* p){
 }
 
 void move(MD dst, MD src){
-    memmove((void*) dst, (void*) src, src->size + MD_8SIZE;);
+    memmove((void*) dst, (void*) src, src->size + MD_8SIZE);
 }
 
 MD merge_n_move(MD dst, MD src){
     merge(dst, src);
     move(dst, src);
-    return dst
+    return dst;
 }
 
 void* map_realloc(MD md, size_t size){
@@ -330,7 +331,7 @@ void* heap_realloc(MD md, size_t size){
         md->is_free = true;
         _new_assign(size - (md->size + prev_size));
         md->is_free = is_free;
-        new_md = (prev_size ? merge_n_move(prev, md) : md)
+        new_md = (prev_size ? merge_n_move(prev, md) : md);
     }
 
     else if(md->size + next_size >= size){
@@ -363,14 +364,11 @@ void* heap_realloc(MD md, size_t size){
 
 void* srealloc(void* oldp, size_t size){
     size = Ceil8(size);
-    size_t full_size = size + MD_8SIZE;
-    MD oldp_md, new_md;
+    MD oldp_md;
     if(oldp && (oldp_md=d2md(oldp))->size >= size)
         return oldp;
     
-    size_t copy_size = oldp_md->size + MD_8SIZE;
-    
-    return (oldp_md->is_heap ? heap_realloc(oldp_md, size), map_realloc(oldp_md, size));
+    return (oldp_md->is_heap ? heap_realloc(oldp_md, size) :  map_realloc(oldp_md, size));
 
 
 }
