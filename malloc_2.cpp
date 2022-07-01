@@ -3,6 +3,8 @@
 #include <unistd.h>
 #include <string.h>
 
+#include <stdio.h>
+
 #define MAX_SIZE pow(10, 8)
 #define BAD_SBRK ((void*)(-1))
 
@@ -24,11 +26,11 @@ bool validate_size(size_t size){
 }
 
 void* md2d(MD md){
-    return (void*) (md+MD_SIZE);
+    return (void*) (((char*)md)+MD_SIZE);
 }
 
 MD d2md(void* d){
-    return (MD)d - MD_SIZE;
+    return (MD)((char*)d - MD_SIZE);
 }
 
 
@@ -80,11 +82,10 @@ MD get_first(BlockFilter filter, void* args){
 //similar code to smalloc from malloc_1.cpp
 void* _new_assign(size_t size){
     size_t full_size = size + MD_SIZE;
-    void* ppd = sbrk(full_size);
-    if (ppd == BAD_SBRK)
+    MD new_md = (MD)sbrk(full_size);
+    if (new_md == BAD_SBRK)
         return NULL;
     
-    MD new_md = (MD) ppd;
     new_md->size = size;
     new_md->is_free = false;
     insert(new_md);
@@ -112,7 +113,7 @@ void* smalloc(size_t size){
         return NULL;
 
     MD first_fit = get_first(free_n_fit, &size);
-    return (first_fit ? _re_assign(first_fit) : _new_assign(size));
+    return (first_fit!=NULL ? _re_assign(first_fit) : _new_assign(size));
 }
 
 void* scalloc(size_t num, size_t size){
