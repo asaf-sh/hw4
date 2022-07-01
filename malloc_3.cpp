@@ -48,11 +48,11 @@ MD d2md(void* d){
 struct MallocMetaData_t head_t = {&head_t, &head_t, false, 0};
 MD head = (MD) &head_t;
 
-struct MallocMetaData_t map_head_t = {&head_t, &head_t, false, 0};
-MD map_head = (MD) &head_t;
+struct MallocMetaData_t map_head_t = {&map_head_t, &map_head_t, false, 0};
+MD map_head = (MD) &map_head_t;
 
 MD ncc1701d = NULL;
-MD elizabeth2 = NULL;
+
 
 bool is_wild(MD md){
     return md == ncc1701d;
@@ -112,19 +112,22 @@ void insert(MD md){
 
 //*********START - ALLOC UTILS************//
 
+void* enterprise_expantion(size_t size){
+    if(sbrk(size - (ncc1701d->size)) == BAD_ALLOC)
+        return NULL;
+    ncc1701d->size = size;
+    return ncc1701d;
+}
+
 //for sure - size%8==0
 void* _new_assign(size_t size){
     size_t full_size = size + MD_8SIZE;  //8 multiplicant
-
+    bool is_heap = full_size < MMAP_SIZE;
     //wilderness expantion
-    if(full_size < MMAP_SIZE && ncc1701d && ncc1701d->is_free){
-        if(sbrk(size - (ncc1701d->size)) == BAD_ALLOC)
-            return NULL;
-        ncc1701d->size = size;
-        return ncc1701d;
-    }
+    if(is_heap && ncc1701d && ncc1701d->is_free)
+        return enterprise_expantion(size);
 
-    MD new_md = (MD)(full_size < MMAP_SIZE ? sbrk(full_size) : \
+    MD new_md = (MD)(is_heap ? sbrk(full_size) : \
                     mmap(NULL, full_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
     
     if (new_md == BAD_ALLOC)
@@ -132,7 +135,7 @@ void* _new_assign(size_t size){
     
     new_md->size = size;
     new_md->is_free = false;
-    new_md->is_heap = (full_size < MMAP_SIZE);
+    new_md->is_heap = is_heap;
 
     if(new_md->is_heap){
         new_md->adjacent_prev = ncc1701d;
