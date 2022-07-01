@@ -293,7 +293,10 @@ void* heap_realloc(MD md, size_t size){
     else if (is_wild(md)){
         bool is_free = md->is_free;
         md->is_free = true;
-        _new_assign(size - (md->size + prev_size));
+        if(_new_assign(size - (md->size + prev_size)) == NULL){
+            md->is_free = is_free;
+            return NULL;
+        }
         md->is_free = is_free;
         new_md = (prev_size ? merge_n_move(prev, md) : md);
     }
@@ -308,13 +311,15 @@ void* heap_realloc(MD md, size_t size){
     }
     
     else if(next->is_free && is_wild(next)){
-        _new_assign(size - (md->size + next_size + prev_size));
+        if(_new_assign(size - (md->size + next_size + prev_size)) == NULL)
+            return NULL;
         merge(md, next);
         new_md = (prev_size ? merge_n_move(prev, md) : md);
     }
 
     else{
-        new_md = d2md(smalloc(size - md->size));
+        if((new_md = d2md(smalloc(size - md->size))) == NULL)
+            return NULL;
         move(new_md, md);
         sfree(md2d(md));
     }
@@ -327,11 +332,14 @@ void* heap_realloc(MD md, size_t size){
 
 
 void* srealloc(void* oldp, size_t size){
-    size = Ceil8(size);
-    MD oldp_md;
-    if(oldp && (oldp_md=d2md(oldp))->size >= size)
-        return oldp;
+    if(size == 0 || size > MAX_SIZE)
+        return NULL;
     
+    if(oldp == NULL)
+        return smalloc(size);
+    
+    size = Ceil8(size);
+    MD oldp_md = d2md(oldp);
     return (oldp_md->is_heap ? heap_realloc(oldp_md, size) :  map_realloc(oldp_md, size));
 
 
