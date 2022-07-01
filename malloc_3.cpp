@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdio.h>
 
 #include <sys/mman.h>
 
@@ -20,7 +21,7 @@ struct MallocMetaData_t{
     MD adjacent_prev;
 };
 
-#define Ceil8(x) ((x%8 ? x+8-%8 : x))
+#define Ceil8(x) ((x%8 ? x+8-x%8 : x))
 #define MD_SIZE (sizeof(struct MallocMetaData_t))
 #define MD_8SIZE (Ceil8(MD_SIZE))
 #define MMAP_SIZE (128 * 1024)
@@ -102,7 +103,7 @@ bool size_x_addr_lex(MD md, void* void_key){
 
 void insert(MD md){
     lex_key md_key = {md->size, md};
-    MD first_greater = get_first(size_x_addr_lex, &md_key);
+    MD first_greater = get_first(head, size_x_addr_lex, &md_key);
     first_greater ? _insert_before(md, first_greater) : push_back(head, md);
 }
 
@@ -117,13 +118,13 @@ void* _new_assign(size_t size){
 
     //wilderness expantion
     if(full_size < MMAP_SIZE && ncc1701d && ncc1701d->is_free){
-        if(sbark(size - ncc1701d->size) == BAD_ALLOC)
+        if(sbrk(size - (ncc1701d->size)) == BAD_ALLOC)
             return NULL;
         ncc1701d->size = size;
         return ncc1701d;
     }
 
-    MD new_md = (full_size < MMAP_SIZE ? sbrk(full_size - (ncc1701d->is_free * ncc1701d->size)) : \
+    MD new_md = (MD)(full_size < MMAP_SIZE ? sbrk(full_size - (ncc1701d->is_free * ncc1701d->size)) : \
                     mmap(NULL, full_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
     
     if (new_md == BAD_ALLOC)
@@ -181,7 +182,7 @@ void* smalloc(size_t size){
     size = Ceil8(size);
     if(!validate_size(size))
         return NULL;
-    MD first_fit = get_first(free_n_fit, &size);
+    MD first_fit = get_first(head, free_n_fit, &size);
     
     // notice that for size > MMAP first_fit must return as NULL
     return first_fit ? _re_assign(first_fit, size) : _new_assign(size);
@@ -196,7 +197,7 @@ void* scalloc(size_t num, size_t size){
 }
 
 void free_map(MD md){
-    if(munmap(p, p_md->size + MD_8SIZE) == -1)
+    if(munmap(md, md->size + MD_8SIZE) == -1)
         printf("handle bad munmap");
     _remove(md);
 }
@@ -236,7 +237,7 @@ void free_heap(MD md){
 void sfree(void* p){
     if(p){
         MD p_md = (MD)p;
-        (MD)p->is_heap ? free_heap(p_md) : free_map(p_md);
+        ((MD)p)->is_heap ? free_heap(p_md) : free_map(p_md);
     }
 }
 
@@ -250,7 +251,7 @@ void* srealloc(void* oldp, size_t size){
     size_t copy_size = oldp_md->size + MD_8SIZE;
     
     if(!(oldp_md->is_heap)){
-        new_md = mmap(NULL, full_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        new_md = (MD) mmap(NULL, full_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         if(new_md == NULL)
             return NULL;
         memmove(new_md, oldp_md, copy_size);
@@ -261,7 +262,7 @@ void* srealloc(void* oldp, size_t size){
 
     MD prev = get_prev_adjacent(oldp_md);
     if(prev && prev->is_free && prev->size + oldp_md->size +MD_8SIZE >= size){
-        new_md = merge(prev, new_md);
+        new_md = merge(prev, oldp_md);
         memmove(new_md, oldp_md, copy_size);
         
         if(new_md->size - size > SPLIT_SIZE)
@@ -273,9 +274,9 @@ void* srealloc(void* oldp, size_t size){
         size_t alloc_size = size - prev->size;
         bool is_free = oldp_md->is_free;
         oldp_md->is_free = true;
-        MD new_md = _new_assign(alloc_size);
+       	new_md = d2md(_new_assign(alloc_size));
         oldp_md->is_free = is_free;
-        MD new_md = merge(prev, new_md);
+        new_md = merge(prev, new_md);
         memmove(new_md, oldp_md, copy_size);
 
         if(new_md->size - size > SPLIT_SIZE)
@@ -287,12 +288,12 @@ void* srealloc(void* oldp, size_t size){
     else if(is_wild(oldp_md)){
         bool is_free = oldp_md->is_free;
         oldp_md->is_free = true;
-        MD new_md = (MD)_new_assign(alloc_size);
+        new_md = d2md(_new_assign(size));
         oldp_md->is_free = is_free;
         return oldp_md;
     }
 
-    MD next - get_next_adjacent(oldp_md);
+    MD next = get_next_adjacent(oldp_md);
     if(next && next->is_free && next->size + oldp_md->size + MD_8SIZE >= size){
         new_md = merge(oldp_md, next);
         
@@ -302,7 +303,7 @@ void* srealloc(void* oldp, size_t size){
         return new_md;
     }
     else if(prev && prev->is_free && next&&next->is_free&&prev->size + oldp_md->size + next->size +2*MD_8SIZE >= size){
-        new_md = merge(prev, new_md);
+        new_md = merge(prev, oldp_md);
         memmove(new_md, oldp_md, copy_size);
         new_md = merge(new_md, next);
 
@@ -316,7 +317,7 @@ void* srealloc(void* oldp, size_t size){
         if(prev && prev->is_free){
             size_t alloc_size = size - (prev->size + 2*MD_8SIZE + oldp_md->size);
             _new_assign(alloc_size);
-            new_md = merge(prev, new_md);
+            new_md = merge(prev, oldp_md);
             memmove(new_md, oldp_md, copy_size);
             new_md = merge(new_md, next);
         }
@@ -324,7 +325,7 @@ void* srealloc(void* oldp, size_t size){
         else{
             size_t alloc_size = size - (MD_8SIZE + oldp_md->size);
             _new_assign(alloc_size);
-            new_md = merge(prev, new_md);   
+            new_md = merge(prev, oldp_md);   
         }
 
         if(new_md->size - size > SPLIT_SIZE)
@@ -337,7 +338,7 @@ void* srealloc(void* oldp, size_t size){
         void* newp = smalloc(size);
         if(newp){
             memmove(newp, oldp, oldp_md->size);
-            free_heap(oldp);
+            free_heap(oldp_md);
         }
         return newp;
     }
