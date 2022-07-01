@@ -44,16 +44,19 @@ MD d2md(void* d){
 //*********END - GENERAL UTILS************//
 
 //*********START - LIST************//
-
-struct MallocMetaData_t head_t = {&head_t, &head_t, false, 0};
+struct MallocMetaData_t head_t = {&head_t, &head_t, false,true, 0, &head_t};
+struct MallocMetaData_t map_head_t = {&map_head_t, &map_head_t, false,false, 0, NULL};
 MD head = (MD) &head_t;
-
-struct MallocMetaData_t map_head_t = {&map_head_t, &map_head_t, false, 0};
 MD map_head = (MD) &map_head_t;
 
 MD ncc1701d = NULL;
 
-
+void print_heap(){
+	printf("printing heap:\n");
+	for(MD curr = head->next; curr != head; curr=curr->next){
+		print_md(curr);
+	}
+}
 bool is_wild(MD md){
     return md == ncc1701d;
 }
@@ -206,6 +209,7 @@ void print_md(MD md){
 	printf("addr=%p\tprev=%p\tnext=%p\tfree=%d\theap=%d\tsize=%lu\tap=%p\n", (void*)md, (void*)md->prev, (void*)md->next, md->is_free, md->is_heap, md->size, (void*)md->adjacent_prev);
 }
 void* smalloc(size_t size){
+	print_heap();
     printf("smalloc start %lu\n", size);
 	size = Ceil8(size);
     if(!validate_size(size))
@@ -237,7 +241,7 @@ void free_map(MD md){
 }
 
 MD get_next_adjacent(MD md){
-    return is_wild(md) ? NULL : md + MD_8SIZE + md->size;
+    return is_wild(md) ? NULL : (MD)((char*)md + MD_8SIZE + md->size);
 }
 
 MD get_prev_adjacent(MD md){
@@ -257,8 +261,12 @@ MD merge(MD left, MD right){
 void free_heap(MD md){
     md->is_free = true;
     MD next = get_next_adjacent(md);
-    if(next && next->is_free)
+    printf("got next = %p\n", (void*) next);
+    if(!is_wild(md) && next->is_free){
+	    printf("in merge next\n");
+	    print_md(next);
         md = merge(md, next);
+    }
     
     MD prev = get_prev_adjacent(md);
     if(prev && prev->is_free)
@@ -270,12 +278,13 @@ void free_heap(MD md){
 
 void sfree(void* p){
 	printf("start free - %p\tis_heap = %d\n", p, d2md(p)->is_heap);
+	print_heap();
     if(p){
         MD p_md = d2md(p);
         p_md->is_heap ? free_heap(p_md) : free_map(p_md);
     }
-
 	printf("done free - %p\n", p);
+	print_heap();
 }
 
 void* srealloc(void* oldp, size_t size){
@@ -427,6 +436,7 @@ size_t _num_free_bytes(){
 size_t _num_allocated_blocks(){
     size_t counter=0;
     get_stats(head, &counter, tautology, NULL, count);
+    printf("countr = %lu\n",counter);
     get_stats(map_head, &counter, tautology, NULL, count);
     return counter;
 }
