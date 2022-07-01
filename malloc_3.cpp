@@ -20,7 +20,7 @@ struct MallocMetaData_t{
     size_t size;
     MD adjacent_prev;
 };
-void print_md(MD);
+//void print_md(MD);
 #define Ceil8(x) ((x%8==0 ? x : x+8-x%8))
 #define MD_SIZE (sizeof(struct MallocMetaData_t))
 #define MD_8SIZE (Ceil8(MD_SIZE))
@@ -51,13 +51,13 @@ MD map_head = (MD) &map_head_t;
 
 MD ncc1701d = NULL;
 
-void print_heap(){
+/*void print_heap(){
 	printf("printing heap:\n\n");
 	for(MD curr = head->next; curr != head; curr=curr->next){
 		print_md(curr);
 	}
 	printf("\n");
-}
+}*/
 bool is_wild(MD md){
     return md == ncc1701d;
 }
@@ -67,27 +67,16 @@ bool is_empty(MD l){
 }
 
 void _insert_before(MD new_md, MD pos){
-    printf("pos = %p\n", (void*) pos);
 	new_md->prev = pos->prev;
-    printf("set prev - %p\n",(void*)pos->prev);
     pos->prev->next = new_md;
-    printf("set next\n");
-
 
     pos->prev = new_md;
-    printf("set prev\n");
     new_md->next = pos;
-    printf("set next\n");
 }
 
 void _remove(MD md){
-	printf("in _remove\n");
-	//print_md(md);
-	printf("removeing %p\tprev=%p\n", (void*) md, (void*)md->prev);
     md->prev->next = md->next;
-    printf("unchained prev\n");
     md->next->prev = md->prev; 
-    printf("unchained next\n");
 }
 
 void push_back(MD l, MD md){
@@ -118,9 +107,7 @@ bool size_x_addr_lex(MD md, void* void_key){
 
 void insert(MD md){
     lex_key md_key = {md->size, (void*) md};
-    printf("assigned key\n");
     MD first_greater = get_first(head, size_x_addr_lex, &md_key);
-    printf("got greater - %p\n", (void*) first_greater);
     (first_greater!=NULL ? _insert_before(md, first_greater) : push_back(head, md));
 }
 
@@ -130,16 +117,13 @@ void insert(MD md){
 //*********START - ALLOC UTILS************//
 
 void* enterprise_expansion(size_t size){
-	printf("in enterprise!\n");
     if(sbrk(size - (ncc1701d->size)) == BAD_ALLOC)
         return NULL;
     ncc1701d->size = size;
     return ncc1701d;
 }
 void* new_map(size_t size){
-	printf("mapping - %lu\n", size);
 	void* p = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-	printf("mapped - %p\n", p);
 	return p;
 }
 
@@ -150,13 +134,11 @@ void* _new_assign(size_t size){
     //wilderness expantion
     if(is_heap && ncc1701d && ncc1701d->is_free)
         return enterprise_expansion(size);
-    printf("is heap = %d\n", is_heap);
     MD new_md = (MD)(is_heap ? sbrk(full_size) : new_map(full_size));
     
     if (new_md == BAD_ALLOC)
         return NULL;
     
-    printf("good alloc - %p\n", (void*) new_md);
     new_md->size = size;
     new_md->is_free = false;
     new_md->is_heap = is_heap;
@@ -164,9 +146,7 @@ void* _new_assign(size_t size){
     if(new_md->is_heap){
         new_md->adjacent_prev = ncc1701d;
         ncc1701d = new_md;  //setting new frontier
-	printf("inserting\n");
         insert(new_md);
-	printf("inserted\n");
     }
     else{
         push_back(map_head, new_md);
@@ -206,12 +186,10 @@ bool free_n_fit(MD md, void* size_ptr){
 
 
 //*********START - REQUSTED FUNCTIONS************//
-void print_md(MD md){
+/*void print_md(MD md){
 	printf("addr=%p\tprev=%p\tnext=%p\tfree=%d\theap=%d\tsize=%lu\tap=%p\n", (void*)md, (void*)md->prev, (void*)md->next, md->is_free, md->is_heap, md->size, (void*)md->adjacent_prev);
-}
+}*/
 void* smalloc(size_t size){
-	print_heap();
-    printf("smalloc start %lu\n", size);
 	size = Ceil8(size);
     if(!validate_size(size))
         return NULL;
@@ -220,8 +198,6 @@ void* smalloc(size_t size){
     // notice that for size > MMAP first_fit must return as NULL
     //return first_fit!=NULL ? _re_assign(first_fit, size) : _new_assign(size);
     void* p =  (first_fit!=NULL ? _re_assign(first_fit, size) : _new_assign(size));
-    printf("done smalloc\n");
-    print_md(d2md(p));
     return p;
 }
 
@@ -234,11 +210,9 @@ void* scalloc(size_t num, size_t size){
 }
 
 void free_map(MD md){
-	printf("freeing map - %p\n", (void*) md);
     _remove(md);
     if(munmap((void*) md, md->size + MD_8SIZE) == -1)
         printf("handle bad munmap\n");
-    printf("freed map - %p\n", (void*) md);
 }
 
 MD get_next_adjacent(MD md){
@@ -250,7 +224,6 @@ MD get_prev_adjacent(MD md){
 }
 
 MD merge(MD left, MD right){
-	printf("start merge : %p to %p\n", (void*)right, (void*) left);
     _remove(right);
     left->size += right->size + MD_8SIZE;
     
@@ -260,23 +233,18 @@ MD merge(MD left, MD right){
 	    get_next_adjacent(right)->adjacent_prev = right->adjacent_prev;
     }
     
-	printf("done merge : %p to %p\n", (void*)right, (void*) left);
     return left;
 }
 
 void free_heap(MD md){
     md->is_free = true;
     MD next = get_next_adjacent(md);
-    printf("got next = %p\n", (void*) next);
     if(next != NULL  && next->is_free){
-	    printf("in merge next\n");
-	    print_md(next);
         md = merge(md, next);
     }
     
     MD prev = get_prev_adjacent(md);
     if(prev != NULL && prev->is_free){
-	    printf("in merge prev\n");
         md = merge(prev, md);
     } 
     _remove(md);
@@ -284,14 +252,10 @@ void free_heap(MD md){
 }
 
 void sfree(void* p){
-	printf("start free - %p\tis_heap = %d\n", p, d2md(p)->is_heap);
-	print_heap();
     if(p){
         MD p_md = d2md(p);
         p_md->is_heap ? free_heap(p_md) : free_map(p_md);
     }
-	printf("done free - %p\n", p);
-	print_heap();
 }
 
 void move(MD dst, MD src){
@@ -418,7 +382,6 @@ size_t _num_free_bytes(){
 size_t _num_allocated_blocks(){
     size_t counter=0;
     get_stats(head, &counter, tautology, NULL, count);
-    printf("countr = %lu\n",counter);
     get_stats(map_head, &counter, tautology, NULL, count);
     return counter;
 }
