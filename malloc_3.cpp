@@ -293,6 +293,74 @@ void sfree(void* p){
 	print_heap();
 }
 
+void move(MD dst, MD src){
+    memmove((void*) dst, (void*) src, src->size + MD_8SIZE;);
+}
+
+MD merge_n_move(MD dst, MD src){
+    merge(dst, src);
+    move(dst, src);
+    return dst
+}
+
+void* map_realloc(MD md, size_t size){
+    size_t full_size = size + MD_8SIZE;
+    MD new_md = (MD) new_map(full_size);
+    if(new_md == NULL)
+        return NULL;
+    move(new_md, md);
+    new_md->size = size;
+    free_map(md);
+    return new_md;
+}
+
+void* heap_realloc(MD md, size_t size){
+
+    MD new_md;
+    MD prev = get_prev_adjacent(md);
+    size_t prev_size = (prev && prev->is_free ? prev->size+MD_8SIZE : 0);
+    MD next = get_next_adjacent(md);
+    size_t next_size = (next->is_free ? next->size+MD_8SIZE : 0);
+    
+    if(md->size + prev_size >= size)
+        new_md = merge_n_move(prev, md);
+
+    else if (is_wild(md)){
+        bool is_free = md->is_free;
+        md->is_free = true;
+        _new_assign(size - (md->size + prev_size));
+        md->is_free = is_free;
+        new_md = (prev_size ? merge_n_move(prev, md) : md)
+    }
+
+    else if(md->size + next_size >= size){
+        new_md = merge(md, next);
+    }
+
+    else if(md->size + next_size + prev_size >= size){
+        merge(md, next);
+        new_md = merge_n_move(prev, md);
+    }
+    
+    else if(next->is_free && is_wild(next)){
+        _new_assign(size - (md->size + next_size + prev_size));
+        merge(md, next);
+        new_md = (prev_size ? merge_n_move(prev, md) : md);
+    }
+
+    else{
+        new_md = d2md(smalloc(size - md->size));
+        move(new_md, md);
+        sfree(md2d(md));
+    }
+
+    if(new_md->size - size > SPLIT_SIZE){
+        split_block(new_md, size);
+    }
+    return new_md;
+}
+
+
 void* srealloc(void* oldp, size_t size){
     size = Ceil8(size);
     size_t full_size = size + MD_8SIZE;
@@ -302,98 +370,8 @@ void* srealloc(void* oldp, size_t size){
     
     size_t copy_size = oldp_md->size + MD_8SIZE;
     
-    if(!(oldp_md->is_heap)){
-        new_md = (MD) new_map(full_size);
-        if(new_md == NULL)
-            return NULL;
-        memmove(new_md, oldp_md, copy_size);
-        new_md->size = size;
-        free_map(oldp_md);
-        return new_md;
-    }
+    return (oldp_md->is_heap ? heap_realloc(oldp_md, size), map_realloc(oldp_md, size));
 
-    MD prev = get_prev_adjacent(oldp_md);
-    if(prev && prev->is_free && prev->size + oldp_md->size +MD_8SIZE >= size){
-        new_md = merge(prev, oldp_md);
-        memmove(new_md, oldp_md, copy_size);
-        
-        if(new_md->size - size > SPLIT_SIZE)
-            split_block(new_md, size);
-        return new_md;
-    }
-
-    else if(prev && prev->is_free && is_wild(oldp_md)){
-        size_t alloc_size = size - prev->size;
-        bool is_free = oldp_md->is_free;
-        oldp_md->is_free = true;
-       	new_md = d2md(_new_assign(alloc_size));
-        oldp_md->is_free = is_free;
-        new_md = merge(prev, new_md);
-        memmove(new_md, oldp_md, copy_size);
-
-        if(new_md->size - size > SPLIT_SIZE)
-            split_block(new_md, size);
-        
-        return new_md;
-    }
-
-    else if(is_wild(oldp_md)){
-        bool is_free = oldp_md->is_free;
-        oldp_md->is_free = true;
-        new_md = d2md(_new_assign(size));
-        oldp_md->is_free = is_free;
-        return oldp_md;
-    }
-
-    MD next = get_next_adjacent(oldp_md);
-    if(next && next->is_free && next->size + oldp_md->size + MD_8SIZE >= size){
-        new_md = merge(oldp_md, next);
-        
-        if(new_md->size - size > SPLIT_SIZE)
-            split_block(new_md, size);
-            
-        return new_md;
-    }
-    else if(prev && prev->is_free && next&&next->is_free&&prev->size + oldp_md->size + next->size +2*MD_8SIZE >= size){
-        new_md = merge(prev, oldp_md);
-        memmove(new_md, oldp_md, copy_size);
-        new_md = merge(new_md, next);
-
-        if(new_md->size - size > SPLIT_SIZE)
-            split_block(new_md, size);
-
-        return new_md;
-    }
-
-    else if(next && next->is_free && is_wild(next)){
-        if(prev && prev->is_free){
-            size_t alloc_size = size - (prev->size + 2*MD_8SIZE + oldp_md->size);
-            _new_assign(alloc_size);
-            new_md = merge(prev, oldp_md);
-            memmove(new_md, oldp_md, copy_size);
-            new_md = merge(new_md, next);
-        }
-        
-        else{
-            size_t alloc_size = size - (MD_8SIZE + oldp_md->size);
-            _new_assign(alloc_size);
-            new_md = merge(prev, oldp_md);   
-        }
-
-        if(new_md->size - size > SPLIT_SIZE)
-            split_block(new_md, size);
-
-        return new_md;
-    }
-
-    else{
-        void* newp = smalloc(size);
-        if(newp){
-            memmove(newp, oldp, oldp_md->size);
-            free_heap(oldp_md);
-        }
-        return newp;
-    }
 
 }
 //*********END - REQUSTED FUNCTIONS************//
