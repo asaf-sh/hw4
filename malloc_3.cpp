@@ -102,7 +102,7 @@ bool size_x_addr_lex(MD md, void* void_key){
 }
 
 void insert(MD md){
-    lex_key md_key = {md->size, md};
+    lex_key md_key = {md->size, (void*) md};
     MD first_greater = get_first(head, size_x_addr_lex, &md_key);
     first_greater ? _insert_before(md, first_greater) : push_back(head, md);
 }
@@ -112,7 +112,7 @@ void insert(MD md){
 
 //*********START - ALLOC UTILS************//
 
-void* enterprise_expantion(size_t size){
+void* enterprise_expansion(size_t size){
     if(sbrk(size - (ncc1701d->size)) == BAD_ALLOC)
         return NULL;
     ncc1701d->size = size;
@@ -125,8 +125,8 @@ void* _new_assign(size_t size){
     bool is_heap = full_size < MMAP_SIZE;
     //wilderness expantion
     if(is_heap && ncc1701d && ncc1701d->is_free)
-        return enterprise_expantion(size);
-
+        return enterprise_expansion(size);
+    printf("%d\n", is_heap);
     MD new_md = (MD)(is_heap ? sbrk(full_size) : \
                     mmap(NULL, full_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
     
