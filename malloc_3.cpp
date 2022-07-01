@@ -156,13 +156,12 @@ void* _new_assign(size_t size){
 }
 
 void split_block(MD old_md, size_t offset){
-    MD new_md = (old_md + MD_8SIZE) + offset;
+    MD new_md = (MD) ((char*)old_md + MD_8SIZE) + offset;
     new_md->is_free = true;
     new_md->size = old_md->size - (offset + MD_8SIZE);
     new_md->is_heap = true;
     new_md->adjacent_prev = old_md;
     insert(new_md);
-    
     old_md->size = offset;
     
     if(is_wild(old_md))
