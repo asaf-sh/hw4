@@ -33,11 +33,11 @@ bool validate_size(size_t size){
 }
 
 void* md2d(MD md){
-    return (void*) (md+MD_8SIZE);
+    return (void*) (((char*)md)+MD_8SIZE);
 }
 
 MD d2md(void* d){
-    return (MD)d - MD_8SIZE;
+    return (MD)((char*)d - MD_8SIZE);
 }
 
 
