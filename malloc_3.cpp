@@ -52,10 +52,11 @@ MD map_head = (MD) &map_head_t;
 MD ncc1701d = NULL;
 
 void print_heap(){
-	printf("printing heap:\n");
+	printf("printing heap:\n\n");
 	for(MD curr = head->next; curr != head; curr=curr->next){
 		print_md(curr);
 	}
+	printf("\n");
 }
 bool is_wild(MD md){
     return md == ncc1701d;
@@ -85,8 +86,7 @@ void _remove(MD md){
 	printf("removeing %p\tprev=%p\n", (void*) md, (void*)md->prev);
     md->prev->next = md->next;
     printf("unchained prev\n");
-    md->next->prev = md->prev;
-    
+    md->next->prev = md->prev; 
     printf("unchained next\n");
 }
 
@@ -249,12 +249,17 @@ MD get_prev_adjacent(MD md){
 }
 
 MD merge(MD left, MD right){
+	printf("start merge : %p to %p\n", (void*)right, (void*) left);
     _remove(right);
     left->size += right->size + MD_8SIZE;
     
     if(is_wild(right))
         ncc1701d = left;
+    else{
+	    get_next_adjacent(right)->adjacent_prev = right->adjacent_prev;
+    }
     
+	printf("done merge : %p to %p\n", (void*)right, (void*) left);
     return left;
 }
 
@@ -269,10 +274,10 @@ void free_heap(MD md){
     }
     
     MD prev = get_prev_adjacent(md);
-    if(prev != NULL && prev->is_free)
+    if(prev != NULL && prev->is_free){
+	    printf("in merge prev\n");
         md = merge(prev, md);
-	//printf("in merge prev\n");
-    
+    } 
     _remove(md);
     insert(md);
 }
